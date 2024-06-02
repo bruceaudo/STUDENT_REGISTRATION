@@ -3,6 +3,7 @@ const cors = require('cors')
 require('dotenv').config()
 const connectToMongoDB = require('./database/mongoDB.js').connectToMongoDB
 const studentRoute = require("./routes/student.routes.js")
+const searchRoute = require("./routes/search.routes.js")
 const cors_options = {
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
@@ -15,5 +16,6 @@ const app = express()
 app.use(express.json())
 app.use(cors(cors_options))
 app.use('/api/v1/student', studentRoute)
+app.use('/api/v1/search', searchRoute)
 
 app.listen(port, () => console.log(`Server is listening on port ${port}`))
