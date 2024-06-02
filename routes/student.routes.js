@@ -1,14 +1,16 @@
 const router = require('express').Router()
 const Student = require('../schemas/Student')
 const validator = require('email-validator')
-const sendEmail = require("../utils/sendEmail.js")
+const sendEmail = require('../utils/sendEmail.js')
+const { hashPwd, verifyHashedPassword } = require('../utils/encryptPassword.js')
 
 //Register student
 
 router.post('/register', async (req, res) => {
-  const { name, email_address, registration_number } = req.body
+  const { name, email_address, registration_number, password } = req.body
 
-  if (name === '' || email_address === '' || registration_number === '') {
+
+  if (!name || !email_address || !registration_number || !password) {
     return res.status(400).json({
       error: 'Some fields are empty',
       msg: 'All fields must be filled'
@@ -20,41 +22,45 @@ router.post('/register', async (req, res) => {
     })
   }
 
-  //Check if email already in use
-  const emailExists = await Student.findOne({ email_address: email_address })
-  if (emailExists) {
-    return res.status(400).json({
-      error: 'Email already in use',
-      msg: 'Enter a different email address'
-    })
-  }
-
-  //Check if registration number already in use
-  const registrationNumberExists = await Student.findOne({
-    registration_number: registration_number
-  })
-  if (registrationNumberExists) {
-    return res.status(400).json({
-      error: 'Registration number already in use',
-      msg: 'Enter a different registrtion number'
-    })
-  }
-
-  const student = {
-    name: name.toLowerCase(),
-    registration_number: registration_number.toLowerCase(),
-    email_address: email_address.toLowerCase()
-  }
   try {
+    //Check if email already in use
+    const emailExists = await Student.findOne({ email_address: email_address.toLowerCase() })
+    if (emailExists) {
+      return res.status(400).json({
+        error: 'Email already in use',
+        msg: 'Enter a different email address'
+      })
+    }
+
+    //Check if registration number already in use
+    const registrationNumberExists = await Student.findOne({
+      registration_number: registration_number.toLowerCase()
+    })
+    if (registrationNumberExists) {
+      return res.status(400).json({
+        error: 'Registration number already in use',
+        msg: 'Enter a different registrtion number'
+      })
+    }
+
+    const hashedPwd = await hashPwd(password)
+
+    const student = {
+      name: name.toLowerCase(),
+      registration_number: registration_number.toLowerCase(),
+      email_address: email_address.toLowerCase(),
+      password: hashedPwd
+    }
+
     const newStudent = new Student(student)
     await newStudent.save()
 
     //Send email to student if registration is successfull
     await sendEmail(
-  email_address,
-  'Registered Successfully',
-  `Hello ${name},`,
-  `
+      email_address,
+      'Registered Successfully',
+      `Hello ${name},`,
+      `
   <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
     <h2 style="background-color: #4CAF50; color: white; padding: 10px; text-align: center;">Registration Successful</h2>
     <p>Hello <strong>${name}</strong>,</p>
@@ -72,23 +78,70 @@ router.post('/register', async (req, res) => {
     </footer>
   </div>
   `
-)
+    )
 
-
-    res
-      .json({
-        error: null,
-        msg: 'Student registered successfully'
-      })
-      .status(200)
+    res.status(200).json({
+      error: null,
+      msg: 'Student registered successfully'
+    })
   } catch (error) {
-    res
-      .json({
-        error: error,
-        msg: 'Student registration unsuccessful'
-      })
-      .status(500)
+    console.error('Registration error:', error)
+    res.status(500).json({
+      error: error.message,
+      msg: 'Student registration unsuccessful'
+    })
   }
 })
+
+//Login
+router.post('/login', async (req, res) => {
+  const { registration_number, password } = req.body
+
+  if (!registration_number || !password) {
+    return res.status(400).json({
+      error: 'Some fields are empty',
+      msg: 'All fields must be filled'
+    })
+  }
+
+  try {
+    //Check if registration number is registered
+    const registrationNumberExists = await Student.findOne({
+      registration_number: registration_number.toLowerCase()
+    })
+    if (!registrationNumberExists) {
+      return res.status(400).json({
+        error: 'Invalid login credentials',
+        msg: 'Invalid login credentials'
+      })
+    }
+
+    const isPwdVerified = await verifyHashedPassword(
+      registrationNumberExists.password,
+      password
+    )
+
+    if (!isPwdVerified) {
+      return res.status(400).json({
+        error: 'Invalid login credentials',
+        msg: 'Invalid login credentials'
+      })
+    }
+
+    res.status(200).json({
+      error: null,
+      msg: 'Student logged in successfully'
+    })
+  } catch (error) {
+    res.status(500).json({
+      error: error,
+      msg: 'Student login unsuccessful'
+    })
+  }
+})
+
+//Reset password
+
+router.post('/reset', async (req, res) => {})
 
 module.exports = router
